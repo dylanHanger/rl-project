@@ -28,7 +28,7 @@ def train():
         "shapedRewards": False,         # Whether the reward is shaped
     }
     tags = ["Actor Critic"]
-    notes = """Added gradient clipping"""
+    notes = """"""
 
     env = gym.make("NetHackScore-v0")
     if hyperparams["shapedRewards"]:

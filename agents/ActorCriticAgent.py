@@ -27,9 +27,7 @@ class ActorCriticModel(nn.Module):
 
         # 1. Embeddings for the glyphs
         k = 32 # The embedding dimension
-        self.embedding = nn.Sequential(
-            nn.Conv2d(1, k, kernel_size=3, stride=1, padding=1)
-        )
+        self.embedding = nn.Embedding(nh.MAX_GLYPH, k)
 
         # 2: World encoding
         # FIXME: Facebook don't mention any ReLU or MaxPooling but I assume its there.
@@ -99,10 +97,10 @@ class ActorCriticModel(nn.Module):
         )
 
     def _getFeatureSize(self):
-        world = torch.zeros((1, 1, *self.world_shape)).float()
+        world = torch.zeros((1, *self.world_shape)).long()
         stats = torch.zeros((1, self.num_stats)).float()
 
-        world = self.embedding(world)
+        world = self.embedding(world).permute(0,3,1,2)
 
         wx = self.world_features(world)
         sx = self.stats_features(stats)
@@ -133,7 +131,7 @@ class ActorCriticModel(nn.Module):
         state = self._getUsefulStats(state)
 
         # 2: Convert the observation into tensors that live on the correct device
-        state = {k: torch.tensor(v).float().to(DEVICE).unsqueeze(0)
+        state = {k: torch.tensor(v).to(DEVICE).unsqueeze(0)
                  for k, v in state.items()}
 
         ###########################
@@ -141,11 +139,11 @@ class ActorCriticModel(nn.Module):
         ###########################
 
         # 1: Separate the real info
-        world = state["glyphs"].unsqueeze(1)
-        stats = state["blstats"]
+        world = state["glyphs"].long()
+        stats = state["blstats"].float()
 
         # 2: Compute embedding vectors
-        world = self.embedding(world)
+        world = self.embedding(world).permute(0,3,1,2)
 
         # 3: Get features
         wx = self.world_features(world)
