@@ -24,82 +24,89 @@ class ActorCriticModel(nn.Module):
         ############################
         ##  Network Architecture  ##
         ############################
-        # TODO: LSTM, Egocentric crop
 
-        # 1: The map goes through a CNN
+        # 1. Embeddings for the glyphs
+        k = 32 # The embedding dimension
+        self.embedding = nn.Sequential(
+            nn.Conv2d(1, k, kernel_size=3, stride=1, padding=1)
+        )
+
+        # 2: World encoding
+        # FIXME: Facebook don't mention any ReLU or MaxPooling but I assume its there.
         self.world_features = nn.Sequential(
-            nn.Conv2d(in_channels=2, out_channels=128,
-                      kernel_size=3, padding=1),
+            nn.Conv2d(k, 16, kernel_size=3, padding=1, stride=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
 
-            nn.Conv2d(in_channels=128, out_channels=256,
-                      kernel_size=3, padding=1),
+            nn.Conv2d(16, 16, kernel_size=3, padding=1, stride=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
-
-            nn.Conv2d(in_channels=256, out_channels=256,
-                      kernel_size=3, padding=1),
+            
+            nn.Conv2d(16, 16, kernel_size=3, padding=1, stride=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
-
-            nn.Conv2d(in_channels=256, out_channels=10,
-                      kernel_size=3, padding=1),
+            
+            nn.Conv2d(16, 16, kernel_size=3, padding=1, stride=1),
             nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            
+            nn.Conv2d(16, 16, kernel_size=3, padding=1, stride=1),
 
             nn.Flatten()
         )
 
-        # 2: The stats go through a FCNN
+        # 2: TODO: Ego-centric view
+
+
+        # 3: Stats encoding
         self.stats_features = nn.Sequential(
-            nn.Linear(in_features=self.num_stats, out_features=256),
+            nn.Linear(self.num_stats, 128),
             nn.ReLU(inplace=True),
 
-            nn.Linear(in_features=256, out_features=512),
-            nn.ReLU(inplace=True),
-
-            nn.Linear(in_features=512, out_features=512),
-            nn.ReLU(inplace=True),
-
-            nn.Linear(in_features=512, out_features=256),
-            nn.ReLU(inplace=True),
+            nn.Linear(128, 128),
         )
 
-        # 3: The output of previous networks then go into another FCNN
+        # 4: Get latent representation
         self.feature_size = self._getFeatureSize()
-        self.fc = nn.Sequential(
-            nn.Linear(self.feature_size, 1024),
+        self.encoding = nn.Sequential(
+            nn.Linear(self.feature_size, 128),
             nn.ReLU(inplace=True),
 
-            nn.Linear(1024, 1024),
-            nn.ReLU(inplace=True),
-
-            nn.Linear(1024, 512),
+            nn.Linear(128, 128),
         )
 
-        # 4: This output then goes into the Actor and Critic heads
-        # 4.1: Actor
+        # 5: Recurrent policy
+        self.lstm = nn.LSTM(128, 128)
+
+        # 6.1: Actor head
         self.actor_head = nn.Sequential(
-            nn.Linear(512, 256),
+            nn.Linear(128, 128),
             nn.ReLU(inplace=True),
 
-            nn.Linear(256, self.num_actions),
+            nn.Linear(128, self.num_actions),
+            
+            nn.Flatten(),
             nn.Softmax(dim=1)
         )
-        # 4.2: Critic
-        self.value_head = nn.Sequential(
-            nn.Linear(512, 256),
+
+        # 6.2: Critic head
+        self.critic_head = nn.Sequential(
+            nn.Linear(128, 128),
             nn.ReLU(inplace=True),
 
-            nn.Linear(256, 1),
+            nn.Linear(128, 1),
+            nn.Flatten()
         )
 
     def _getFeatureSize(self):
-        world = torch.zeros((1, 2, *self.world_shape)).float()
+        world = torch.zeros((1, 1, *self.world_shape)).float()
         stats = torch.zeros((1, self.num_stats)).float()
+
+        world = self.embedding(world)
 
         wx = self.world_features(world)
         sx = self.stats_features(stats)
+        # cx = self.crop_features(world, *stats[:2])
 
         x = torch.cat([sx, wx], dim=1)
         return x.view(-1).shape[0]
@@ -134,22 +141,29 @@ class ActorCriticModel(nn.Module):
         ###########################
 
         # 1: Separate the real info
-        world = torch.stack([state["chars"], state["colors"]], dim=1)
+        world = state["glyphs"].unsqueeze(1)
         stats = state["blstats"]
 
-        # 2: Compute the world and stats features
+        # 2: Compute embedding vectors
+        world = self.embedding(world)
+
+        # 3: Get features
         wx = self.world_features(world)
         sx = self.stats_features(stats)
+        # cx = self.crop_features(world, *stats[:2])
 
-        # 3: Concatenate the features and pass through MLP
+        # 4: Get low dimensional representation of the state
         x = torch.cat([sx, wx], dim=1)
-        x = self.fc(x)
+        x = self.encoding(x)
 
-        # 4.1: Actor computes probabilities of each action
+        # 5: Compute policy tings
+        x, self.hidden = self.lstm(x.view(1,1,-1), self.hidden)
+
+        # 6.1: Compute action probabilites
         probs = self.actor_head(x)
 
-        # 4.2: Critic computes values of the current state
-        value = self.value_head(x)
+        # 6.2: Compute state value
+        value = self.critic_head(x)
 
         return probs, value
 
@@ -167,41 +181,29 @@ class ActorCriticAgent(AbstractAgent):
         self.rewards = []
         self.actions = []
 
-        # We only allow a subset of actions, so it isn't overwhelming to learn
-        # TODO: Intercardinal directions? (NE/SW/etc)
-        # TODO: Convert between reduced and actual action space
-        self.reduced_action_space = [
-            nh.CompassCardinalDirection.N,
-            nh.CompassCardinalDirection.E,
-            nh.CompassCardinalDirection.S,
-            nh.CompassCardinalDirection.W,
-            nh.MiscDirection.UP,
-            nh.MiscDirection.DOWN,
-            nh.MiscDirection.WAIT,
-            nh.Command.KICK,
-            nh.Command.EAT,
-            nh.Command.SEARCH
-        ]
-        self.reduced_action_space = action_space
-
         # Initialise a model
-        self.model = ActorCriticModel(self.reduced_action_space.n,
+        self.model = ActorCriticModel(self.action_space.n,
                                       5,
                                       observation_space["glyphs"].shape).to(DEVICE)
+        self.reset()
         self.model.train(training)
         if not training:
             # Try to load pretrained weights
             try:
                 # NOTE: Change this when I change the model structure
                 self.model.load_state_dict(torch.load(
-                    "/root/nethack/models/v0latest.pt"))
+                    "/root/nethack/models/v1latest.pt"))
                 print("Weights successfully loaded.")
             except FileNotFoundError:
                 print("Weights file not found.")
 
-    def resetHistory(self):
+    def reset(self):
         del self.rewards[:]
         del self.actions[:]
+
+        # initialize the hidden state.
+        self.model.hidden = (torch.randn(1, 1, 128).to(DEVICE),
+                       torch.randn(1, 1, 128).to(DEVICE))
 
     def act(self, observation):
         with torch.set_grad_enabled(self.training):
@@ -217,8 +219,7 @@ class ActorCriticAgent(AbstractAgent):
             m = Categorical(probs)
             action = m.sample()
 
-            # 3: Save our action/prob pair for future loss calculations
-            self.actions.append(Action(m.log_prob(action), value.squeeze(0)))
-
-            # TODO: The action is in our reduced action space, get the 'true' action index
+            if self.training:
+                # 3: Save our action/prob pair for future loss calculations
+                self.actions.append(Action(m.log_prob(action), value.squeeze(0)))
             return action.item()
