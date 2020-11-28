@@ -2,6 +2,7 @@ import os
 import pickle
 import random
 from itertools import count
+from wrappers.ShapeReward import BotWrapper
 
 import gym
 import nle
@@ -25,11 +26,17 @@ def train():
         "maxSteps": 1e7,               # Maximum steps before ending an episode
         "updateRate": 500,             # Environment steps between optimisation steps
         "filename": "v0latest.pt",     # Filename to save the model to
+        "shapedRewards": True,         # Whether the reward is shaped
     }
+    tags=["Actor Critic"]
+    notes = """"""
 
     env = gym.make("NetHackScore-v0")
-    # env = TensorWrapper(env)
-    # env = StatsWrapper(env)
+    if hyperparams["shapedRewards"]:
+        env = BotWrapper(env)
+        tags.append("Shaped Reward")
+    else:
+        tags.append("Standard Reward")
 
     if hyperparams["seed"] is not None:
         seed = hyperparams["seed"]
@@ -38,7 +45,7 @@ def train():
         random.seed(seed)
         env.seed(seed)
 
-    wandb.init(config=hyperparams, tags=["Actor Critic"], )
+    wandb.init(config=hyperparams, tags=tags, notes=notes)
     wandb.save(hyperparams["filename"])
 
     agent = ActorCriticAgent(env.observation_space,
@@ -115,23 +122,11 @@ def train():
                         "/root/nethack/models", hyperparams["filename"]))
 
                     if (done):
-                        # TODO: Track ttyrec recording
-                        # TODO: Track actual actions
-                        # 'ttyrec', string
                         # To track episode stats
                         wandb.log({
                             "Episode": episode,
                             "Episode Duration": step,
                             "Total Reward": episodeReward,
-                            # These are always 0 for some stupid reason
-                            # "Max HP": last_state["blstats"][11],
-                            # "Depth": last_state["blstats"][12],
-                            # "Gold": last_state["blstats"][13],
-                            # "Level": last_state["blstats"][18],
-
-                            # This is always DEATH, because agent is bad.
-                            # WandB cant show it nice anyway
-                            # "End Status": info["end_status"].name
                         })
                         break
             print(

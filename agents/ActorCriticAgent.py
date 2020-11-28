@@ -195,7 +195,7 @@ class ActorCriticAgent(AbstractAgent):
             try:
                 # NOTE: Change this when I change the model structure
                 self.model.load_state_dict(torch.load(
-                    "/root/nethack/models/v0latest.pt"))
+                    "/root/nethack/models/v0best.pt"))
                 print("Weights successfully loaded.")
             except FileNotFoundError:
                 print("Weights file not found.")
@@ -208,7 +208,7 @@ class ActorCriticAgent(AbstractAgent):
         with torch.set_grad_enabled(self.training):
             ############################
             ##  Get the actual move   ##
-            ##        to make         ##
+            ##        to make         ##n
             ############################
 
             # 1: Consult our model
