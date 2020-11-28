@@ -109,8 +109,7 @@ class ActorCriticModel(nn.Module):
         blstats = observation["blstats"]
         x, y = blstats[0], blstats[1]
         hp, mHp = blstats[10], blstats[11]
-        # Max energy can be 0, and I dont wanna deal with division by 0
-        energy, mEnergy = blstats[14], blstats[15]
+        energy = blstats[14]
         hunger = blstats[21]
 
         observation["blstats"] = [x, y, float(
@@ -127,8 +126,8 @@ class ActorCriticModel(nn.Module):
         state = self._getUsefulStats(state)
 
         # 2: Convert the observation into tensors that live on the correct device
-        state = {k: torch.tensor(v).float().to(
-            DEVICE).unsqueeze(0) for k, v in state.items()}
+        state = {k: torch.tensor(v).float().to(DEVICE).unsqueeze(0)
+                 for k, v in state.items()}
 
         ###########################
         ##  Normal Forward Pass  ##
@@ -195,7 +194,7 @@ class ActorCriticAgent(AbstractAgent):
             try:
                 # NOTE: Change this when I change the model structure
                 self.model.load_state_dict(torch.load(
-                    "/root/nethack/models/v0best.pt"))
+                    "/root/nethack/models/v0latest.pt"))
                 print("Weights successfully loaded.")
             except FileNotFoundError:
                 print("Weights file not found.")
@@ -208,7 +207,7 @@ class ActorCriticAgent(AbstractAgent):
         with torch.set_grad_enabled(self.training):
             ############################
             ##  Get the actual move   ##
-            ##        to make         ##n
+            ##        to make         ##
             ############################
 
             # 1: Consult our model

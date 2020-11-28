@@ -2,6 +2,7 @@
 .empty/
 wandb/
 nle_data/
+models/
 */__pycache__/
 # pickles/
 *.gv
