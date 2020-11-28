@@ -81,14 +81,25 @@ class ActorCriticModel(nn.Module):
             nn.Linear(128, 128),
             nn.ReLU(inplace=True),
 
+            nn.Linear(128, 128),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(128, 128),
+            nn.ReLU(inplace=True),
+
             nn.Linear(128, self.num_actions),
-            
             nn.Flatten(),
             nn.Softmax(dim=1)
         )
 
         # 6.2: Critic head
         self.critic_head = nn.Sequential(
+            nn.Linear(128, 128),
+            nn.ReLU(inplace=True),
+            
+            nn.Linear(128, 128),
+            nn.ReLU(inplace=True),
+
             nn.Linear(128, 128),
             nn.ReLU(inplace=True),
 
