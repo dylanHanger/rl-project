@@ -1,0 +1,8 @@
+.vscode/
+.empty/
+wandb/
+nle_data/
+*/__pycache__/
+# pickles/
+*.gv
+*.png
