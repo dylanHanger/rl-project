@@ -23,7 +23,7 @@ action_names = {
     3: "South",
     4: "West",
     5: "North-East",
-    6: "Sout-East",
+    6: "South-East",
     7: "South-West",
     8: "North-West",
     9: "North Long",
@@ -42,18 +42,20 @@ action_names = {
     22: "Search"
 }
 
+
 def train():
     hyperparams = {
-        "lr": 0.002,                    # the learning rate
-        "seed": 432,                   # which seed to use
-        "gamma": 0.9,                 # the discount factor
-        "maxSteps": 1e7,               # Maximum steps before ending an episode
-        # "updateRate": 5000,             # Environment steps between optimisation steps
-        "filename": "v4latest.pt",     # Filename to save the model to
-        "shapedRewards": False,         # Whether the reward is shaped
+        "lr": 0.002,                # the learning rate
+        "seed": 432,                # which seed to use
+        "gamma": 0.9,               # the discount factor
+        "maxSteps": 1e7,            # Maximum steps before ending an episode
+        # "updateRate": 5000,       # Environment steps between optimisation steps
+        "filename": "v4latest.pt",  # Filename to save the model to
+        "shapedRewards": False,     # Whether the reward is shaped
+        # "criticLossScaling": .5     # Scale the critic loss by this amount to make it rougly equal to the value loss
     }
     tags = ["Actor Critic"]
-    notes = """Smooth l1 loss"""
+    notes = """"""
 
     env = gym.make("NetHackScore-v0")
     if hyperparams["shapedRewards"]:
@@ -74,8 +76,8 @@ def train():
 
     agent = ActorCriticAgent(env.observation_space,
                              env.action_space, training=True)
-    # Low log frequency because updating weights is relatively rare
-    wandb.watch(agent.model, log_freq=10)
+    # Low log frequency because updating weights is once per episode only
+    wandb.watch(agent.model, log_freq=1)
 
     optimiser = optim.RMSprop(agent.model.parameters(),
                               lr=hyperparams["lr"])
@@ -105,13 +107,15 @@ def train():
                 episodeReward += reward
 
                 if done:
-                    actions = [[label, value]  for label, value in zip(action_names.keys(), action_counts)]
-                    table = wandb.Table(data=actions, columns=["Action", "Frequency"])
+                    actions = [[label, value] for label, value in zip(
+                        action_names.values(), action_counts)]
+                    table = wandb.Table(data=actions,
+                                        columns=["Action", "Frequency"])
                     # To track episode stats
                     wandb.log({
                         "Episode": episode,
                         "Episode Duration": step,
-                        "Total Reward": episodeReward,
+                        "Episode Reward": episodeReward,
                         "Actions": wandb.plot.bar(table, "Action", "Frequency", title="Actions Taken")
                     })
                     break
@@ -149,7 +153,7 @@ def train():
                 advantage = R - value.item()
                 policyLoss.append(-log_prob * advantage)
                 criticLoss.append(F.smooth_l1_loss(value,
-                                             torch.tensor([R], device=agent.device)))
+                                                   torch.tensor([R], device=agent.device)))
 
             policyLoss = torch.stack(policyLoss).sum()
             criticLoss = torch.stack(criticLoss).sum()

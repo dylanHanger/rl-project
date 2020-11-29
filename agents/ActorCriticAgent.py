@@ -57,7 +57,6 @@ class Crop(nn.Module):
             .long() # cast to int
         )
 
-# TODO: Crop layer
 # TODO: RND
 class ActorCriticModel(nn.Module):
     def __init__(self, num_actions, num_stats, world_shape):
@@ -200,7 +199,7 @@ class ActorCriticModel(nn.Module):
         ###########################
 
         # 1: Remove some information from the observation
-        state = self._getUsefulStats(state)
+        # state = self._getUsefulStats(state)
 
         # 2: Convert the observation into tensors that live on the correct device
         state = {k: torch.tensor(v).to(DEVICE).unsqueeze(0)
@@ -225,12 +224,11 @@ class ActorCriticModel(nn.Module):
         sx = self.stats_features(stats[:, 2:])
         cx = self.crop_features(crop)
 
-
         # 4: Get low dimensional representation of the state
         x = torch.cat([sx, wx, cx], dim=1)
         x = self.encoding(x)
 
-        # 5: Compute policy tings
+        # 5: Compute policy tings`
         x, self.hidden = self.lstm(x.view(1,1,-1), self.hidden)
         x = x.flatten(0,1)
 
@@ -258,7 +256,7 @@ class ActorCriticAgent(AbstractAgent):
 
         # Initialise a model
         self.model = ActorCriticModel(self.action_space.n,
-                                      5,
+                                      25,
                                       observation_space["glyphs"].shape).to(DEVICE)
         self.reset()
         self.model.train(training)
