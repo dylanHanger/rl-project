@@ -24,7 +24,7 @@ def train():
         "gamma": 0.99,                 # the discount factor
         "maxSteps": 1e7,               # Maximum steps before ending an episode
         # "updateRate": 5000,             # Environment steps between optimisation steps
-        "filename": "v1latest.pt",     # Filename to save the model to
+        "filename": "v2latest.pt",     # Filename to save the model to
         "shapedRewards": False,         # Whether the reward is shaped
     }
     tags = ["Actor Critic"]
@@ -54,9 +54,11 @@ def train():
     wandb.watch(agent.model, log_freq=10)
 
     optimiser = optim.RMSprop(agent.model.parameters(),
-                           lr=hyperparams["lr"])
+                              lr=hyperparams["lr"])
 
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimiser, patience=10)
+
+    bestReward = 0
 
     episodeRewards = []
     try:
@@ -73,7 +75,7 @@ def train():
 
                 state, reward, done, info = env.step(action)
 
-                agent.rewards.append(torch.tanh(torch.tensor([reward/100])))
+                agent.rewards.append(reward)
                 episodeReward += reward
 
                 if done:
@@ -88,7 +90,7 @@ def train():
                 print(blue("Step: ")+yellow(step), blue("\tReward: ") +
                       yellow(f"{episodeReward:.2f}"), end="\r")
             print(
-                f"Ended episode with total score of {cyan(f'{episodeReward:.2f}')}")
+                f"Ended episode in {cyan(f'{step}')} steps with total score of {cyan(f'{episodeReward:.2f}')}")
             episodeRewards.append(episodeReward)
 
             # Actual Learning Code
@@ -105,13 +107,13 @@ def train():
             returns = torch.tensor(returns)
             # Normalise the returns
             returns = (returns - returns.mean()) / \
-                        (returns.std() + 1e-9)
+                (returns.std() + 1e-9)
 
             for (log_prob, value), R in zip(agent.actions, returns):
                 advantage = R - value.item()
                 policyLoss.append(-log_prob * advantage)
                 criticLoss.append(F.mse_loss(value,
-                                                torch.tensor([R], device=agent.device)))
+                                             torch.tensor([R], device=agent.device)))
 
             policyLoss = torch.stack(policyLoss).sum()
             criticLoss = torch.stack(criticLoss).sum()
@@ -130,7 +132,12 @@ def train():
                 "Critic Loss": criticLoss
             })
 
-            # Save the weights whenever we update them
+            # Save the weights whenever we beat our high score
+            if (episodeReward > bestReward):
+                bestReward = episodeReward
+                torch.save(agent.model.state_dict(), os.path.join(
+                    "/root/nethack/models", "best.pt"))
+            # And also when we update
             torch.save(agent.model.state_dict(), os.path.join(
                 "/root/nethack/models", hyperparams["filename"]))
 
