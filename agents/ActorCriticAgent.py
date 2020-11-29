@@ -137,7 +137,6 @@ class ActorCriticModel(nn.Module):
         # 5: Recurrent policy
         self.lstm = nn.LSTM(128, 128)
 
-        # TODO: More complex heads?
         # 6.1: Actor head
         self.actor_head = nn.Sequential(
             nn.Linear(128, 128),

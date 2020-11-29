@@ -53,7 +53,7 @@ def train():
         "shapedRewards": False,         # Whether the reward is shaped
     }
     tags = ["Actor Critic"]
-    notes = """Added ego centric crop. More complex heads. Logging actions now too"""
+    notes = """Smooth l1 loss"""
 
     env = gym.make("NetHackScore-v0")
     if hyperparams["shapedRewards"]:
@@ -106,7 +106,7 @@ def train():
 
                 if done:
                     actions = [[label, value]  for label, value in zip(action_names.keys(), action_counts)]
-                    table = wandb.Table(data=actions, columns=["label", "value"])
+                    table = wandb.Table(data=actions, columns=["Action", "Frequency"])
                     # To track episode stats
                     wandb.log({
                         "Episode": episode,
@@ -148,7 +148,7 @@ def train():
             for (log_prob, value), R in zip(agent.actions, returns):
                 advantage = R - value.item()
                 policyLoss.append(-log_prob * advantage)
-                criticLoss.append(F.mse_loss(value,
+                criticLoss.append(F.smooth_l1_loss(value,
                                              torch.tensor([R], device=agent.device)))
 
             policyLoss = torch.stack(policyLoss).sum()
