@@ -16,20 +16,44 @@ import wandb
 from agents.ActorCriticAgent import ActorCriticAgent
 from wrappers.ShapeReward import BotWrapper
 
+action_names = {
+    0: "More",
+    1: "North",
+    2: "East",
+    3: "South",
+    4: "West",
+    5: "North-East",
+    6: "Sout-East",
+    7: "South-West",
+    8: "North-West",
+    9: "North Long",
+    10: "East Long",
+    11: "South Long",
+    12: "West Long",
+    13: "North-East Long",
+    14: "Sout-East Long",
+    15: "South-West Long",
+    16: "North-West Long",
+    17: "Up",
+    18: "Down",
+    19: "Wait",
+    20: "Kick",
+    21: "Eat",
+    22: "Search"
+}
 
 def train():
     hyperparams = {
-        "lr": 0.0002,                    # the learning rate
+        "lr": 0.002,                    # the learning rate
         "seed": 432,                   # which seed to use
-        "gamma": 0.99,                 # the discount factor
+        "gamma": 0.9,                 # the discount factor
         "maxSteps": 1e7,               # Maximum steps before ending an episode
         # "updateRate": 5000,             # Environment steps between optimisation steps
-        "filename": "v2latest.pt",     # Filename to save the model to
+        "filename": "v4latest.pt",     # Filename to save the model to
         "shapedRewards": False,         # Whether the reward is shaped
     }
     tags = ["Actor Critic"]
-    notes = """RMSProp algorithm with $lr=0.0002$. Also did reward clipping with $r_c=\tanh(\frac\{r\}\{100\}).
-    Weight updates now only happen at end of the episode"""
+    notes = """Added ego centric crop. More complex heads. Logging actions now too"""
 
     env = gym.make("NetHackScore-v0")
     if hyperparams["shapedRewards"]:
@@ -70,8 +94,10 @@ def train():
             episodeReward = 0
 
             step = 0
+            action_counts = [0] * env.action_space.n
             for step in range(int(hyperparams["maxSteps"])):
                 action = agent.act(state)
+                action_counts[action] += 1
 
                 state, reward, done, info = env.step(action)
 
@@ -79,11 +105,14 @@ def train():
                 episodeReward += reward
 
                 if done:
+                    actions = [[label, value]  for label, value in zip(action_names.keys(), action_counts)]
+                    table = wandb.Table(data=actions, columns=["label", "value"])
                     # To track episode stats
                     wandb.log({
                         "Episode": episode,
                         "Episode Duration": step,
                         "Total Reward": episodeReward,
+                        "Actions": wandb.plot.bar(table, "Action", "Frequency", title="Actions Taken")
                     })
                     break
 
@@ -91,6 +120,13 @@ def train():
                       yellow(f"{episodeReward:.2f}"), end="\r")
             print(
                 f"Ended episode in {cyan(f'{step}')} steps with total score of {cyan(f'{episodeReward:.2f}')}")
+
+            if (episodeReward > bestReward):
+                bestReward = episodeReward
+                print(yellow(blink2("New Best!")))
+                torch.save(agent.model.state_dict(), os.path.join(
+                    "/root/nethack/models", "best.pt"))
+
             episodeRewards.append(episodeReward)
 
             # Actual Learning Code
@@ -132,11 +168,6 @@ def train():
                 "Critic Loss": criticLoss
             })
 
-            # Save the weights whenever we beat our high score
-            if (episodeReward > bestReward):
-                bestReward = episodeReward
-                torch.save(agent.model.state_dict(), os.path.join(
-                    "/root/nethack/models", "best.pt"))
             # And also when we update
             torch.save(agent.model.state_dict(), os.path.join(
                 "/root/nethack/models", hyperparams["filename"]))

@@ -36,8 +36,9 @@ if __name__ == '__main__':
         seed_rewards = []
         for i in range(num_runs):
             seed_rewards.append(run_episode(env))
+            print(f"Reward: {seed_rewards[-1]:.3f}", end="\r")
         rewards.append(np.mean(seed_rewards))
-        print(f"Average Seed Reward: {rewards[-1]}")
+        print(f"Average Seed Reward: {rewards[-1]:.3f}")
     # Close environment and print average reward
     env.close()
-    print("Average Reward: %f" %(np.mean(rewards)))
+    print(f"Average Reward: {np.mean(rewards):.3f}")

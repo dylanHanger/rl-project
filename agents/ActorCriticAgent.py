@@ -140,14 +140,14 @@ class ActorCriticModel(nn.Module):
         # TODO: More complex heads?
         # 6.1: Actor head
         self.actor_head = nn.Sequential(
-            # nn.Linear(128, 128),
-            # nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
 
-            # nn.Linear(128, 128),
-            # nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
 
-            # nn.Linear(128, 128),
-            # nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
 
             nn.Linear(128, self.num_actions),
             nn.Softmax(dim=1)
@@ -155,14 +155,14 @@ class ActorCriticModel(nn.Module):
 
         # 6.2: Critic head
         self.critic_head = nn.Sequential(
-            # nn.Linear(128, 128),
-            # nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
             
-            # nn.Linear(128, 128),
-            # nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
 
-            # nn.Linear(128, 128),
-            # nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
 
             nn.Linear(128, 1),
         )
@@ -268,7 +268,7 @@ class ActorCriticAgent(AbstractAgent):
             try:
                 # NOTE: Change this when I change the model structure
                 self.model.load_state_dict(torch.load(
-                    "/root/nethack/models/v3latest.pt"))
+                    "/root/nethack/models/v4latest.pt"))
             except FileNotFoundError:
                 print("Weights file not found.")
 
@@ -289,12 +289,14 @@ class ActorCriticAgent(AbstractAgent):
 
             # 1: Consult our model
             probs, value = self.model(observation)
-
-            # 2: Sample our action based on that
-            m = Categorical(probs)
-            action = m.sample()
-
             if self.training:
+                # 2: Sample our action based on that
+                m = Categorical(probs)
+                action = m.sample()
+
                 # 3: Save our action/prob pair for future loss calculations
                 self.actions.append(Action(m.log_prob(action), value.squeeze(0)))
-            return action.item()
+                return action.item()
+            else:
+                # Don't sample when training
+                return probs.argmax()
