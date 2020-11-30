@@ -52,7 +52,7 @@ def train():
         # "updateRate": 5000,       # Environment steps between optimisation steps
         "filename": "v4latest.pt",  # Filename to save the model to
         "shapedRewards": False,     # Whether the reward is shaped
-        "eta": 0.1,                 # Initial eta
+        "eta": 0.01,                 # Initial eta
         "policyScale": 0.025,
         "criticScale": 0.05,
     }

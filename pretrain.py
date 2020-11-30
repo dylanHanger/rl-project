@@ -1,4 +1,4 @@
-from actorcritic import ACTION_NAMES
+from train import ACTION_NAMES
 import os
 import pickle
 

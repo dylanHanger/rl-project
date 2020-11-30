@@ -1,7 +1,7 @@
 import numpy as np
 import gym
 import nle
-import agents.ActorCriticAgent as MyAgent
+from MyAgent import MyAgent
 
 def run_episode(env):
     # create instance of MyAgent

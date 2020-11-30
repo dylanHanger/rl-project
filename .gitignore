@@ -7,3 +7,5 @@ models/
 # pickles/
 *.gv
 *.png
+MyAgent.py
+leaderboard.zip
