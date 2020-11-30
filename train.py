@@ -45,14 +45,14 @@ ACTION_NAMES = {
 
 def train():
     hyperparams = {
-        "lr": 0.0002,               # the learning rate
+        "lr": 0.002,               # the learning rate
         "seed": 432,                # which seed to use
         "gamma": 0.9,               # the discount factor
         "maxSteps": 1e7,            # Maximum steps before ending an episode
         # "updateRate": 5000,       # Environment steps between optimisation steps
         "filename": "v4latest.pt",  # Filename to save the model to
         "shapedRewards": False,     # Whether the reward is shaped
-        "eta": 0.01,                 # Initial eta
+        "eta": 1.,                 # Initial eta
         "policyScale": 0.025,
         "criticScale": 0.05,
     }
@@ -172,6 +172,7 @@ def train():
             loss.backward()
 
             eta *= .99
+            print(f"Eta: {eta}")
 
             # To track loss
             wandb.log({

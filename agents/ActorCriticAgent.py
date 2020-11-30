@@ -267,6 +267,14 @@ class ActorCriticAgent(AbstractAgent):
                     "/root/nethack/models/v4latest.pt"))
             except FileNotFoundError:
                 print("Weights file not found.")
+        else:
+            # Try to load pretrained weights
+            try:
+                # NOTE: Change this when I change the model structure
+                self.model.load_state_dict(torch.load(
+                    "/root/nethack/models/pretrained.pt"))
+            except:
+                print("Weights file not found.")
 
     def reset(self):
         del self.rewards[:]
