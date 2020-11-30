@@ -12,7 +12,7 @@ from . import AbstractAgent
 DEVICE = torch.device("cuda") if torch.cuda.is_available() \
     else torch.device("cpu")
 
-Action = namedtuple('Action', ['log_prob', 'value'])
+Action = namedtuple('Action', ['log_prob', 'value', "entropy"])
 
 class Crop(nn.Module):
     """Class that crops input image"""
@@ -57,7 +57,6 @@ class Crop(nn.Module):
             .long() # cast to int
         )
 
-# TODO: RND
 class ActorCriticModel(nn.Module):
     def __init__(self, num_actions, num_stats, world_shape):
         super().__init__()
@@ -286,14 +285,13 @@ class ActorCriticAgent(AbstractAgent):
 
             # 1: Consult our model
             probs, value = self.model(observation)
-            if self.training:
-                # 2: Sample our action based on that
-                m = Categorical(probs)
-                action = m.sample()
 
-                # 3: Save our action/prob pair for future loss calculations
-                self.actions.append(Action(m.log_prob(action), value.squeeze(0)))
-                return action.item()
-            else:
-                # Don't sample when training
-                return probs.argmax()
+            # 2: Sample our action based on that
+            m = Categorical(probs)
+            action = m.sample()
+
+            if self.training:
+                # 3: Save our action/prob/entropy tuple for future loss calculations
+                self.actions.append(Action(m.log_prob(action), value.squeeze(0), m.entropy()))
+
+            return action.item()

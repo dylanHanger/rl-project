@@ -16,7 +16,7 @@ import wandb
 from agents.ActorCriticAgent import ActorCriticAgent
 from wrappers.ShapeReward import BotWrapper
 
-action_names = {
+ACTION_NAMES = {
     0: "More",
     1: "North",
     2: "East",
@@ -45,14 +45,16 @@ action_names = {
 
 def train():
     hyperparams = {
-        "lr": 0.002,                # the learning rate
+        "lr": 0.0002,               # the learning rate
         "seed": 432,                # which seed to use
         "gamma": 0.9,               # the discount factor
         "maxSteps": 1e7,            # Maximum steps before ending an episode
         # "updateRate": 5000,       # Environment steps between optimisation steps
         "filename": "v4latest.pt",  # Filename to save the model to
         "shapedRewards": False,     # Whether the reward is shaped
-        # "criticLossScaling": .5     # Scale the critic loss by this amount to make it rougly equal to the value loss
+        "eta": 0.1,                 # Initial eta
+        "policyScale": 0.025,
+        "criticScale": 0.05,
     }
     tags = ["Actor Critic"]
     notes = """"""
@@ -82,12 +84,15 @@ def train():
     optimiser = optim.RMSprop(agent.model.parameters(),
                               lr=hyperparams["lr"])
 
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimiser, patience=10)
+    scheduler = optim.lr_scheduler.StepLR(optimiser, 50)
 
     bestReward = 0
 
     episodeRewards = []
     try:
+        eta = hyperparams["eta"]
+        gamma = hyperparams["gamma"]
+
         for episode in count():
             # Infinite episodes I guess
             print(green(underline(f"Episode {episode}:")))
@@ -108,7 +113,7 @@ def train():
 
                 if done:
                     actions = [[label, value] for label, value in zip(
-                        action_names.values(), action_counts)]
+                        ACTION_NAMES.values(), action_counts)]
                     table = wandb.Table(data=actions,
                                         columns=["Action", "Frequency"])
                     # To track episode stats
@@ -128,6 +133,7 @@ def train():
             if (episodeReward > bestReward):
                 bestReward = episodeReward
                 print(yellow(blink2("New Best!")))
+                wandb.run.summary.update({"Best Episode": episode, "Best Score": episodeReward})
                 torch.save(agent.model.state_dict(), os.path.join(
                     "/root/nethack/models", "best.pt"))
 
@@ -135,13 +141,15 @@ def train():
 
             # Actual Learning Code
             optimiser.zero_grad()
-            policyLoss = []  # Loss for the actor
-            criticLoss = []  # Loss for the critic
+            policyLoss  = 0  # Loss for the actor
+            criticLoss  = 0  # Loss for the critic
+            entropyLoss = 0  # Loss for (not) exploring
             returns = []
 
             R = 0
-            for r in agent.rewards[::-1]:
-                R = r + hyperparams["gamma"] * R
+            
+            for r in agent.rewards:
+                R = r + gamma * R
                 returns.insert(0, R)
 
             returns = torch.tensor(returns)
@@ -149,28 +157,34 @@ def train():
             returns = (returns - returns.mean()) / \
                 (returns.std() + 1e-9)
 
-            for (log_prob, value), R in zip(agent.actions, returns):
+            for (log_prob, value, e), R in zip(agent.actions, returns):
                 advantage = R - value.item()
-                policyLoss.append(-log_prob * advantage)
-                criticLoss.append(F.smooth_l1_loss(value,
-                                                   torch.tensor([R], device=agent.device)))
+                policyLoss += (-log_prob * advantage)
+                criticLoss += (F.smooth_l1_loss(value,
+                                                torch.tensor([R], device=agent.device)))
+                entropyLoss = gamma * entropyLoss + e
 
-            policyLoss = torch.stack(policyLoss).sum()
-            criticLoss = torch.stack(criticLoss).sum()
+            # policyLoss *= hyperparams["policyScale"]
+            # criticLoss *= hyperparams["criticScale"]
+            # entropyLoss *= eta
 
-            loss = policyLoss + criticLoss
+            loss = hyperparams["policyScale"]*policyLoss + hyperparams["criticScale"]*criticLoss - eta*entropyLoss
             loss.backward()
+
+            eta *= .99
+
+            # To track loss
+            wandb.log({
+                "Policy Loss": policyLoss.cpu(),
+                "Critic Loss": criticLoss.cpu(),
+                "Entropy Loss": entropyLoss.cpu()
+            })
 
             nn.utils.clip_grad_norm_(agent.model.parameters(), 40.)
 
             optimiser.step()
+            scheduler.step()
             agent.reset()
-
-            # To track loss
-            wandb.log({
-                "Policy Loss": policyLoss,
-                "Critic Loss": criticLoss
-            })
 
             # And also when we update
             torch.save(agent.model.state_dict(), os.path.join(
